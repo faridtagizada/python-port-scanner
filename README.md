@@ -16,7 +16,7 @@ Only scan machines you own or have written permission to scan. Scanning without 
 ## Install
 
 ```bash
-git clone https://github.com/<your-username>/python-port-scanner.git
+git clone https://github.com/faridtagizada/python-port-scanner.git
 cd python-port-scanner
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -33,7 +33,7 @@ python -m portscanner 127.0.0.1
 # the most common ports, with banners
 python -m portscanner scanme.nmap.org -p common -b
 
-# specific ports, JSON output
+# specific ports, JSON output (the results/ folder is created if it doesn't exist)
 python -m portscanner 192.168.1.1 -p 22,80,443 -o results/scan.json
 
 # every port, 200 threads, short timeout
@@ -44,9 +44,11 @@ python -m portscanner 127.0.0.1 -p 1-65535 -t 200 --timeout 0.5
 |---|---|---|
 | `-p, --ports` | Ports to scan | `1-1024` |
 | `-t, --threads` | Number of threads | `100` |
-| `--timeout` | Timeout in seconds | `1.0` |
+| `--timeout` | Timeout in seconds, must be greater than 0 | `1.0` |
 | `-b, --banner` | Grab banners | off |
-| `-o, --output` | `.json` or `.csv` file | none |
+| `-o, --output` | `.json` or `.csv` file (any other extension is refused before the scan starts) | none |
+
+The target can be an IPv4 address, an IPv6 address or a hostname; IPv4 is used when a name has both. Banners come from the scanned host, so non-printable characters are replaced with `?`, and in CSV a banner that starts with `=`, `+`, `-` or `@` gets a leading `'` so that a spreadsheet shows it as text instead of running it as a formula.
 
 Example (against two test listeners on 127.0.0.1):
 
@@ -75,13 +77,14 @@ python-port-scanner/
 │   └── cli.py        # argparse CLI
 ├── tests/test_scanner.py
 ├── requirements.txt
+├── conftest.py              # lets a plain `pytest` find the package
 └── README.md
 ```
 
 ## Tests
 
 ```bash
-pytest -v
+pytest -v          # or: python -m pytest -v
 ```
 
 ## TODO
