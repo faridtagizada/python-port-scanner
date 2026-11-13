@@ -2,12 +2,36 @@
 import argparse
 import csv
 import json
+import math
+import os
 import sys
 import time
 from datetime import datetime
 
 from . import __version__
 from .scanner import parse_ports, resolve_target, scan
+
+
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not an integer: {value!r}") from None
+    if number < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return number
+
+
+def _positive_float(value: str) -> float:
+    # 0 would put the sockets in non-blocking mode: connect_ex() returns at once
+    # and every open port looks closed. A negative value makes Python raise.
+    try:
+        number = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a number: {value!r}") from None
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0 (e.g. 0.5)")
+    return number
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,8 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("target", help="IP address or hostname")
     p.add_argument("-p", "--ports", default="1-1024",
                    help="Ports: '22,80', '1-1024' or 'common' (default: 1-1024)")
-    p.add_argument("-t", "--threads", type=int, default=100, help="Number of threads (default: 100)")
-    p.add_argument("--timeout", type=float, default=1.0, help="Timeout in seconds (default: 1.0)")
+    p.add_argument("-t", "--threads", type=_positive_int, default=100, help="Number of threads (default: 100)")
+    p.add_argument("--timeout", type=_positive_float, default=1.0, help="Timeout in seconds (default: 1.0)")
     p.add_argument("-b", "--banner", action="store_true", help="Grab banners")
     p.add_argument("-o", "--output", help="Results file (.json or .csv)")
     p.add_argument("-v", "--version", action="version", version=__version__)
@@ -33,7 +57,10 @@ def print_table(results) -> None:
 
 
 def save(results, path: str, meta: dict) -> None:
-    if path.endswith(".csv"):
+    folder = os.path.dirname(path)
+    if folder:
+        os.makedirs(folder, exist_ok=True)  # e.g. -o results/scan.json
+    if path.lower().endswith(".csv"):
         with open(path, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=["port", "state", "service", "banner"])
             w.writeheader()
@@ -60,6 +87,9 @@ def main(argv=None) -> int:
     except KeyboardInterrupt:
         print("\n[!] Stopped by the user.")
         return 130
+    except OSError as exc:  # e.g. "Too many open files" with a very high -t
+        print(f"Error: {exc}. Try fewer threads (-t).", file=sys.stderr)
+        return 1
     elapsed = time.time() - start
 
     if results:
@@ -72,7 +102,11 @@ def main(argv=None) -> int:
         meta = {"target": args.target, "ip": ip, "scanned_ports": len(ports),
                 "duration_sec": round(elapsed, 2),
                 "timestamp": datetime.now().isoformat(timespec="seconds")}
-        save(results, args.output, meta)
+        try:
+            save(results, args.output, meta)
+        except OSError as exc:
+            print(f"Error: could not write {args.output}: {exc}", file=sys.stderr)
+            return 1
         print(f"[+] Results written to: {args.output}")
     return 0
 
