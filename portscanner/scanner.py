@@ -31,17 +31,25 @@ def parse_ports(spec: str) -> List[int]:
         if not part:
             continue
         if "-" in part:
-            start, end = part.split("-", 1)
-            start, end = int(start), int(end)
+            start, end = (_to_port(x, part) for x in part.split("-", 1))
             if start > end:
                 raise ValueError(f"Invalid range: {part}")
             ports.update(range(start, end + 1))
         else:
-            ports.add(int(part))
-    for p in ports:
-        if not 1 <= p <= 65535:
-            raise ValueError(f"Port must be between 1 and 65535: {p}")
+            ports.add(_to_port(part, part))
     return sorted(ports)
+
+
+def _to_port(text: str, part: str) -> int:
+    # Checked before a range is expanded, so a typo like 1-999999999 can't
+    # build a huge list in memory first.
+    text = text.strip()
+    if not (text.isascii() and text.isdigit()):
+        raise ValueError(f"Invalid port: {part}")
+    port = int(text)
+    if not 1 <= port <= 65535:
+        raise ValueError(f"Port must be between 1 and 65535: {part}")
+    return port
 
 
 def resolve_target(target: str) -> str:
@@ -59,7 +67,12 @@ def grab_banner(sock: socket.socket, port: int) -> Optional[str]:
             sock.sendall(b"HEAD / HTTP/1.0\r\n\r\n")
         data = sock.recv(1024)
         text = data.decode("utf-8", errors="replace").strip()
-        return text.splitlines()[0][:120] if text else None
+        if not text:
+            return None
+        # The banner comes from the scanned host. Control characters (e.g. ANSI
+        # escape codes) would be printed straight to our terminal, so replace them.
+        line = text.splitlines()[0][:120]
+        return "".join(ch if ch.isprintable() else "?" for ch in line)
     except (socket.timeout, OSError):
         return None
 

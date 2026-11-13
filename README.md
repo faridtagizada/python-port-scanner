@@ -9,14 +9,14 @@ Only scan machines you own or have written permission to scan. Scanning without 
 - Fast parallel scanning with `socket` and `ThreadPoolExecutor`
 - Port specs: a single port (`22`), a list (`22,80`), a range (`1-1024`) or `common`
 - Service name lookup for well-known ports
-- Banner grabbing with `-b`, sending a `HEAD` request on HTTP ports
+- Banner grabbing with `-b`, sending a `HEAD` request on HTTP ports. Control characters in a banner are replaced with `?`, so a hostile service can't send escape codes to your terminal
 - Hostnames are resolved to an IP first
 - Output as a terminal table, JSON or CSV
 
 ## Install
 
 ```bash
-git clone https://github.com/<your-username>/python-port-scanner.git
+git clone https://github.com/faridtagizada/python-port-scanner.git
 cd python-port-scanner
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -43,10 +43,10 @@ python -m portscanner 127.0.0.1 -p 1-65535 -t 200 --timeout 0.5
 | Option | Description | Default |
 |---|---|---|
 | `-p, --ports` | Ports to scan | `1-1024` |
-| `-t, --threads` | Number of threads | `100` |
-| `--timeout` | Timeout in seconds | `1.0` |
+| `-t, --threads` | Number of threads (at least 1) | `100` |
+| `--timeout` | Timeout in seconds (more than 0) | `1.0` |
 | `-b, --banner` | Grab banners | off |
-| `-o, --output` | `.json` or `.csv` file | none |
+| `-o, --output` | `.json` or `.csv` file (missing folders are created) | none |
 
 Example (against two test listeners on 127.0.0.1):
 
