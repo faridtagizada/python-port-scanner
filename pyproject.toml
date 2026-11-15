@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "python-port-scanner"
+dynamic = ["version"]
+description = "Simple multi-threaded TCP connect port scanner"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Fərid Tağızadə" }]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+portscanner = "portscanner.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/faridtagizada/python-port-scanner"
+
+[tool.setuptools]
+packages = ["portscanner"]
+
+[tool.setuptools.dynamic]
+version = { attr = "portscanner.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

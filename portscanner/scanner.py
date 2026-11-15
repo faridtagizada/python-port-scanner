@@ -16,7 +16,7 @@ RESERVED_FDS = 32       # file descriptors left for stdout, the output file, the
 @dataclass
 class PortResult:
     port: int
-    state: str          # "open" | "closed"
+    state: str          # "open" | "closed" | "filtered"
     service: str
     banner: Optional[str] = None
 
@@ -25,10 +25,10 @@ class PortResult:
 
 
 def _port_number(text: str) -> int:
-    try:
-        port = int(text)
-    except ValueError:
-        raise ValueError(f"Not a port number: {text!r}") from None
+    # Only plain ASCII digits: int() would also take "+22", "2_2" or digits from other scripts.
+    if not (text.isascii() and text.isdigit()):
+        raise ValueError(f"Not a port number: {text!r}")
+    port = int(text)
     if not 1 <= port <= MAX_PORT:
         raise ValueError(f"Port must be between 1 and {MAX_PORT}: {port}")
     return port
@@ -40,8 +40,8 @@ def parse_ports(spec: str) -> List[int]:
     if spec == "common":
         return sorted(COMMON_PORTS)
     ports: Set[int] = set()
-    for part in spec.split(","):
-        part = part.strip()
+    for raw in spec.split(","):
+        part = raw.strip()
         if not part:
             continue
         if "-" in part:
@@ -88,19 +88,28 @@ def grab_banner(sock: socket.socket, port: int) -> Optional[str]:
 
 def scan_port(host: str, port: int, timeout: float = 1.0,
               banner: bool = False) -> PortResult:
-    """Checks a single port with a TCP connect. host is an IPv4 or IPv6 address."""
+    """Checks a single port with a TCP connect. host is an IPv4 or IPv6 address.
+
+    open:     the handshake succeeded
+    closed:   the host answered with a reset (connection refused)
+    filtered: no answer within the timeout, or the host or network is unreachable,
+              which usually means a firewall drops the packets (the same meaning as in nmap)
+    """
     sock: Optional[socket.socket] = None
     try:
         sock = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
-        if sock.connect_ex((host, port)) == 0:
+        code = sock.connect_ex((host, port))
+        if code == 0:
             info = grab_banner(sock, port) if banner else None
             return PortResult(port, "open", service_name(port), info)
-        return PortResult(port, "closed", service_name(port))
+        # errno.ECONNREFUSED is also the Windows code (WSAECONNREFUSED) in Python
+        state = "closed" if code == errno.ECONNREFUSED else "filtered"
+        return PortResult(port, state, service_name(port))
     except OSError as exc:
         if exc.errno in (errno.EMFILE, errno.ENFILE):
             raise       # out of file descriptors: "closed" would be a wrong answer, so stop instead
-        return PortResult(port, "closed", service_name(port))
+        return PortResult(port, "filtered", service_name(port))
     finally:
         if sock is not None:
             sock.close()
@@ -119,8 +128,8 @@ def usable_threads(requested: int) -> int:
 
 
 def scan(host: str, ports: List[int], threads: int = 100,
-         timeout: float = 1.0, banner: bool = False) -> List[PortResult]:
-    """Scans the ports in parallel and returns only the open ones."""
+         timeout: float = 1.0, banner: bool = False, only_open: bool = True) -> List[PortResult]:
+    """Scans the ports in parallel. Returns the open ones, or every port with only_open=False."""
     if threads < 1:
         raise ValueError("threads must be at least 1")
     if timeout <= 0:
@@ -128,4 +137,4 @@ def scan(host: str, ports: List[int], threads: int = 100,
         raise ValueError("timeout must be greater than 0")
     with ThreadPoolExecutor(max_workers=usable_threads(threads)) as pool:
         results = pool.map(lambda p: scan_port(host, p, timeout, banner), ports)
-        return [r for r in results if r.state == "open"]
+        return [r for r in results if not only_open or r.state == "open"]

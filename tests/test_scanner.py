@@ -1,4 +1,5 @@
 import csv
+import errno
 import json
 import socket
 import threading
@@ -27,7 +28,7 @@ def test_parse_common():
     assert 22 in ports and 443 in ports
 
 
-@pytest.mark.parametrize("bad", ["0", "70000", "30-20", "", " , ", "abc", "1-", "22-abc"])
+@pytest.mark.parametrize("bad", ["0", "70000", "30-20", "", " , ", "abc", "1-", "22-abc", "+22", "2_2", "\u0662\u0662"])
 def test_parse_invalid(bad):
     with pytest.raises(ValueError):
         parse_ports(bad)
@@ -160,3 +161,39 @@ def test_unknown_output_extension_is_refused_before_the_scan(capsys):
 def test_empty_port_list_is_an_error(capsys):
     assert cli.main(["127.0.0.1", "-p", ""]) == 1
     assert "No ports given" in capsys.readouterr().err
+
+
+class _SilentSocket:
+    """Stands in for a socket whose SYN gets no answer: connect_ex returns EAGAIN after the timeout."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def settimeout(self, value):
+        pass
+
+    def connect_ex(self, address):
+        return errno.EAGAIN
+
+    def close(self):
+        pass
+
+
+def test_no_answer_is_filtered_not_closed(monkeypatch):
+    monkeypatch.setattr(scanner.socket, "socket", _SilentSocket)
+    assert scan_port("192.0.2.1", 80, timeout=0.1).state == "filtered"
+
+
+def test_summary_counts_closed_and_filtered(server, tmp_path, capsys):
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    closed_port = s.getsockname()[1]
+    s.close()
+    target = tmp_path / "scan.json"
+    assert cli.main(["127.0.0.1", "-p", f"{server},{closed_port}", "-o", str(target)]) == 0
+    assert "Open ports: 1, closed: 1, filtered: 0" in capsys.readouterr().out
+    data = json.loads(target.read_text())
+    assert (data["closed_ports"], data["filtered_ports"]) == (1, 0)
+    assert [r["port"] for r in data["results"]] == [server]
+    every_port = scan("127.0.0.1", [server, closed_port], timeout=0.5, only_open=False)
+    assert [r.state for r in every_port] == ["open", "closed"]     # same order as the ports given

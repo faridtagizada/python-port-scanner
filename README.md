@@ -22,7 +22,9 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Needs Python 3.8+. The scanner has no dependencies; `requirements.txt` is only for `pytest`.
+Needs Python 3.9 or newer. The scanner has no dependencies; `requirements.txt` is only for `pytest`.
+
+`pip install .` installs it as the `portscanner` command, which then works from any folder (`portscanner 127.0.0.1` is the same as `python -m portscanner 127.0.0.1`).
 
 ## Usage
 
@@ -60,12 +62,18 @@ PORT    STATE   SERVICE         BANNER
 22      open    ssh             SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13
 80      open    http            HTTP/1.0 200 OK
 
-[+] Open ports: 2, time: 0.05s
+[+] Open ports: 2, closed: 1022, filtered: 0, time: 0.05s
 ```
 
 ## How it works
 
-For every port the scanner tries a normal TCP three-way handshake (`connect_ex`). If the connection succeeds, the port counts as open. A thread pool checks many ports at the same time.
+For every port the scanner tries a normal TCP three-way handshake (`connect_ex`). A thread pool checks many ports at the same time. Each port gets one of three states, with the same meaning as in nmap:
+
+- **open**: the handshake succeeded
+- **closed**: the host answered with a reset (connection refused), so nothing listens there
+- **filtered**: no answer within `--timeout`, or the host or network is unreachable; usually a firewall drops the packets
+
+The table lists only the open ports; the last line counts the closed and filtered ones, and a JSON file has them as `closed_ports` and `filtered_ports`. If many ports show as filtered on a slow network, a longer `--timeout` can turn some of them into open or closed.
 
 ## Layout
 
@@ -77,6 +85,8 @@ python-port-scanner/
 │   └── cli.py        # argparse CLI
 ├── tests/test_scanner.py
 ├── requirements.txt
+├── pyproject.toml           # pip install . / the portscanner command
+├── .flake8
 ├── conftest.py              # lets a plain `pytest` find the package
 └── README.md
 ```

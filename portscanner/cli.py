@@ -94,7 +94,7 @@ def main(argv=None) -> int:
     print(f"[*] Target: {args.target} ({ip}) | {len(ports)} ports | {datetime.now():%Y-%m-%d %H:%M:%S}")
     start = time.time()
     try:
-        results = scan(ip, ports, args.threads, args.timeout, args.banner)
+        every_port = scan(ip, ports, args.threads, args.timeout, args.banner, only_open=False)
     except KeyboardInterrupt:
         print("\n[!] Stopped by the user.")
         return 130
@@ -102,15 +102,19 @@ def main(argv=None) -> int:
         print(f"Error: the scan stopped: {exc}. Try fewer threads (-t).", file=sys.stderr)
         return 1
     elapsed = time.time() - start
+    results = [r for r in every_port if r.state == "open"]
+    closed = sum(r.state == "closed" for r in every_port)
+    filtered = len(every_port) - len(results) - closed
 
     if results:
         print_table(results)
     else:
         print("No open ports found.")
-    print(f"\n[+] Open ports: {len(results)}, time: {elapsed:.2f}s")
+    print(f"\n[+] Open ports: {len(results)}, closed: {closed}, filtered: {filtered}, time: {elapsed:.2f}s")
 
     if args.output:
         meta = {"target": args.target, "ip": ip, "scanned_ports": len(ports),
+                "closed_ports": closed, "filtered_ports": filtered,
                 "duration_sec": round(elapsed, 2),
                 "timestamp": datetime.now().isoformat(timespec="seconds")}
         try:
