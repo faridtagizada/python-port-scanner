@@ -197,3 +197,10 @@ def test_summary_counts_closed_and_filtered(server, tmp_path, capsys):
     assert [r["port"] for r in data["results"]] == [server]
     every_port = scan("127.0.0.1", [server, closed_port], timeout=0.5, only_open=False)
     assert [r.state for r in every_port] == ["open", "closed"]     # same order as the ports given
+
+
+def test_version_flag_is_capital_v(capsys):
+    from portscanner import __version__
+    with pytest.raises(SystemExit):
+        cli.main(["-V"])
+    assert capsys.readouterr().out.strip() == __version__

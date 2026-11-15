@@ -48,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--timeout", type=positive_float, default=1.0, help="Timeout in seconds (default: 1.0)")
     p.add_argument("-b", "--banner", action="store_true", help="Grab banners")
     p.add_argument("-o", "--output", type=output_file, help="Results file (.json or .csv)")
-    p.add_argument("-v", "--version", action="version", version=__version__)
+    p.add_argument("-V", "--version", action="version", version=__version__)  # -v usually means "verbose"
     return p
 
 
